@@ -53,9 +53,11 @@ class ${CLASS} < Formula
   # tarball directly.
   depends_on :macos
 
-  on_intel do
-    url "https://github.com/${REPO}/releases/download/${TAG}/${BIN}_Darwin_x86_64.tar.gz"
-    sha256 "${DARWIN_AMD64}"
+  on_macos do
+    on_intel do
+      url "https://github.com/${REPO}/releases/download/${TAG}/${BIN}_Darwin_x86_64.tar.gz"
+      sha256 "${DARWIN_AMD64}"
+    end
   end
 
   def install
