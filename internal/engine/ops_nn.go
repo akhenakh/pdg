@@ -71,26 +71,6 @@ func matmulNode(n *Node, env map[string]*Tensor) error {
 	return nil
 }
 
-// matmul2D computes C[M,N] = A[M,K] * B[K,N].
-func matmul2D(A, B, C []float32, M, K, N int) {
-	for i := 0; i < M; i++ {
-		c := C[i*N : (i+1)*N]
-		for j := range c {
-			c[j] = 0
-		}
-		a := A[i*K : (i+1)*K]
-		for k, av := range a {
-			if av == 0 {
-				continue
-			}
-			b := B[k*N : (k+1)*N]
-			for j, bv := range b {
-				c[j] += av * bv
-			}
-		}
-	}
-}
-
 func gemmNode(n *Node, env map[string]*Tensor) error {
 	a := env[n.In[0]]
 	b := env[n.In[1]]
@@ -113,27 +93,34 @@ func gemmNode(n *Node, env map[string]*Tensor) error {
 		return fmt.Errorf("Gemm %v x %v: inner dimensions differ", a.Shape, b.Shape)
 	}
 	out := newF32(M, N)
-	for i := 0; i < M; i++ {
-		for k := 0; k < K; k++ {
-			var av float32
-			if transA {
-				av = a.F[k*M+i]
-			} else {
-				av = a.F[i*K+k]
-			}
-			if av == 0 {
-				continue
-			}
-			for j := 0; j < N; j++ {
-				var bv float32
-				if transB {
-					bv = b.F[j*K2+k]
+	doRows := func(ilo, ihi int) {
+		for i := ilo; i < ihi; i++ {
+			for k := 0; k < K; k++ {
+				var av float32
+				if transA {
+					av = a.F[k*M+i]
 				} else {
-					bv = b.F[k*N+j]
+					av = a.F[i*K+k]
 				}
-				out.F[i*N+j] += av * bv
+				if av == 0 {
+					continue
+				}
+				for j := 0; j < N; j++ {
+					var bv float32
+					if transB {
+						bv = b.F[j*K2+k]
+					} else {
+						bv = b.F[k*N+j]
+					}
+					out.F[i*N+j] += av * bv
+				}
 			}
 		}
+	}
+	if M*K*N >= 200000 {
+		parallelFor(M, doRows)
+	} else {
+		doRows(0, M)
 	}
 	if alpha != 1 {
 		for i := range out.F {
@@ -202,31 +189,68 @@ func convNode(n *Node, env map[string]*Tensor) error {
 		Lout = 0
 	}
 	out := newF32(N, M, Lout)
-	Mpg := M / group
-	for nn := 0; nn < N; nn++ {
-		for oc := 0; oc < M; oc++ {
-			g := oc / Mpg
-			ic0 := g * Cg
-			var bv float32
+	if group == M && group == C && Cg == 1 && stride == 1 && dilation == 1 {
+		depthwiseConv1D(out.F, x.F, w.F, func() []float32 {
 			if bias != nil {
-				bv = bias.F[oc]
+				return bias.F
 			}
-			obase := oc * Lout
-			for o := 0; o < Lout; o++ {
-				sum := bv
-				xpos := o*stride - padL
-				for ic := 0; ic < Cg; ic++ {
-					row := ((nn*C)+ic0+ic)*L + xpos
-					wrow := (oc*Cg + ic) * K
-					for k := 0; k < K; k++ {
-						p := xpos + k*dilation
-						if p >= 0 && p < L {
-							sum += x.F[row+k*dilation] * w.F[wrow+k]
+			return nil
+		}(), N, C, L, Lout, K, padL)
+		env[n.Out[0]] = out
+		return nil
+	}
+	if group == 1 && stride == 1 && dilation == 1 {
+		var b []float32
+		if bias != nil {
+			b = bias.F
+		}
+		work := N * M * C * K * Lout
+		doCh := func(lo, hi int) {
+			for idx := lo; idx < hi; idx++ {
+				denseConvChannel(out.F, x.F, w.F, b, idx/M, idx%M, N, C, L, Lout, M, K, padL)
+			}
+		}
+		if work >= 200000 {
+			parallelFor(N*M, doCh)
+		} else {
+			doCh(0, N*M)
+		}
+		env[n.Out[0]] = out
+		return nil
+	}
+	Mpg := M / group
+	work := M * Lout * Cg * K
+	for nn := 0; nn < N; nn++ {
+		doOC := func(oclo, ochi int) {
+			for oc := oclo; oc < ochi; oc++ {
+				g := oc / Mpg
+				ic0 := g * Cg
+				var bv float32
+				if bias != nil {
+					bv = bias.F[oc]
+				}
+				obase := oc * Lout
+				for o := 0; o < Lout; o++ {
+					sum := bv
+					xpos := o*stride - padL
+					for ic := 0; ic < Cg; ic++ {
+						row := ((nn*C)+ic0+ic)*L + xpos
+						wrow := (oc*Cg + ic) * K
+						for k := 0; k < K; k++ {
+							p := xpos + k*dilation
+							if p >= 0 && p < L {
+								sum += x.F[row+k*dilation] * w.F[wrow+k]
+							}
 						}
 					}
+					out.F[obase+o] = sum
 				}
-				out.F[obase+o] = sum
 			}
+		}
+		if work >= 200000 {
+			parallelFor(M, doOC)
+		} else {
+			doOC(0, M)
 		}
 	}
 	env[n.Out[0]] = out
@@ -319,8 +343,9 @@ func instanceNormNode(n *Node, env map[string]*Tensor) error {
 	N, C := x.Shape[0], x.Shape[1]
 	spatial := numel(x.Shape[2:])
 	out := newF32(x.Shape...)
-	for nn := 0; nn < N; nn++ {
-		for c := 0; c < C; c++ {
+	doNC := func(lo, hi int) {
+		for nc := lo; nc < hi; nc++ {
+			nn, c := nc/C, nc%C
 			base := (nn*C + c) * spatial
 			row := x.F[base : base+spatial]
 			var mean float64
@@ -342,6 +367,11 @@ func instanceNormNode(n *Node, env map[string]*Tensor) error {
 				o[i] = (v-float32(mean))*inv*s + b
 			}
 		}
+	}
+	if N*C*spatial >= 200000 {
+		parallelFor(N*C, doNC)
+	} else {
+		doNC(0, N*C)
 	}
 	env[n.Out[0]] = out
 	return nil
@@ -365,32 +395,39 @@ func layerNormNode(n *Node, env map[string]*Tensor) error {
 	outer := numel(x.Shape[:axis])
 	eps := float32(n.floatAttr("epsilon", 1e-5))
 	out := newF32(x.Shape...)
-	for o := 0; o < outer; o++ {
-		row := x.F[o*inner : (o+1)*inner]
-		var mean float64
-		for _, v := range row {
-			mean += float64(v)
-		}
-		mean /= float64(inner)
-		var vr float64
-		for _, v := range row {
-			d := float64(v) - mean
-			vr += d * d
-		}
-		vr /= float64(inner)
-		inv := float32(1 / math.Sqrt(vr+float64(eps)))
-		dst := out.F[o*inner : (o+1)*inner]
-		for i, v := range row {
-			s := float32(1)
-			b := float32(0)
-			if i < scale.Numel() {
-				s = scale.F[i]
+	doRows := func(olo, ohi int) {
+		for o := olo; o < ohi; o++ {
+			row := x.F[o*inner : (o+1)*inner]
+			var mean float64
+			for _, v := range row {
+				mean += float64(v)
 			}
-			if bias != nil && i < bias.Numel() {
-				b = bias.F[i]
+			mean /= float64(inner)
+			var vr float64
+			for _, v := range row {
+				d := float64(v) - mean
+				vr += d * d
 			}
-			dst[i] = (v-float32(mean))*inv*s + b
+			vr /= float64(inner)
+			inv := float32(1 / math.Sqrt(vr+float64(eps)))
+			dst := out.F[o*inner : (o+1)*inner]
+			for i, v := range row {
+				s := float32(1)
+				b := float32(0)
+				if i < scale.Numel() {
+					s = scale.F[i]
+				}
+				if bias != nil && i < bias.Numel() {
+					b = bias.F[i]
+				}
+				dst[i] = (v-float32(mean))*inv*s + b
+			}
 		}
+	}
+	if outer*inner >= 200000 {
+		parallelFor(outer, doRows)
+	} else {
+		doRows(0, outer)
 	}
 	env[n.Out[0]] = out
 	return nil
@@ -409,27 +446,34 @@ func softmaxNode(n *Node, env map[string]*Tensor) error {
 	inner := numel(x.Shape[axis+1:])
 	outer := numel(x.Shape[:axis])
 	out := newF32(x.Shape...)
-	for o := 0; o < outer; o++ {
-		for in := 0; in < inner; in++ {
-			base := o*d*inner + in
-			maxv := float32(math.Inf(-1))
-			for k := 0; k < d; k++ {
-				if v := x.F[base+k*inner]; v > maxv {
-					maxv = v
-				}
-			}
-			var sum float32
-			for k := 0; k < d; k++ {
-				v := float32(math.Exp(float64(x.F[base+k*inner] - maxv)))
-				out.F[base+k*inner] = v
-				sum += v
-			}
-			if sum != 0 {
+	doOuter := func(olo, ohi int) {
+		for o := olo; o < ohi; o++ {
+			for in := 0; in < inner; in++ {
+				base := o*d*inner + in
+				maxv := float32(math.Inf(-1))
 				for k := 0; k < d; k++ {
-					out.F[base+k*inner] /= sum
+					if v := x.F[base+k*inner]; v > maxv {
+						maxv = v
+					}
+				}
+				var sum float32
+				for k := 0; k < d; k++ {
+					v := float32(math.Exp(float64(x.F[base+k*inner] - maxv)))
+					out.F[base+k*inner] = v
+					sum += v
+				}
+				if sum != 0 {
+					for k := 0; k < d; k++ {
+						out.F[base+k*inner] /= sum
+					}
 				}
 			}
 		}
+	}
+	if outer*d*inner >= 200000 {
+		parallelFor(outer, doOuter)
+	} else {
+		doOuter(0, outer)
 	}
 	env[n.Out[0]] = out
 	return nil

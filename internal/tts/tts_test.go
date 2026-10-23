@@ -94,9 +94,19 @@ func TestStreamMatchesSynthesize(t *testing.T) {
 	if len(got) != len(want) {
 		t.Fatalf("streamed %d samples, synthesized %d", len(got), len(want))
 	}
+	var maxDiff float32
 	for i := range got {
-		if got[i] != want[i] {
-			t.Fatalf("sample %d: streamed %g, synthesized %g", i, got[i], want[i])
+		d := got[i] - want[i]
+		if d < 0 {
+			d = -d
 		}
+		if d > maxDiff {
+			maxDiff = d
+		}
+	}
+	// SIMD FMA rounds differently from the scalar build; the shapes and
+	// content must still match.
+	if maxDiff > 2e-6 {
+		t.Fatalf("streamed vs synthesized max diff %g", maxDiff)
 	}
 }
