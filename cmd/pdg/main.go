@@ -69,6 +69,8 @@ func main() {
 
 	var sink func([]float32) error
 	var finish func() error
+	var start time.Time
+	var playAt time.Duration
 	bufferedPlay := false
 	path := *out
 	if !*play && path == "" {
@@ -76,11 +78,37 @@ func main() {
 	}
 	if *play && path == "" {
 		if p, err := startStreamingPlayer(); err == nil {
+			// Keep the encoded audio while streaming: if the player dies
+			// (unsupported flags, missing audio device, ...), restart
+			// playback from the beginning through the buffered player
+			// instead of failing with a broken pipe.
+			fallback := canPlayBuffered()
+			var streamed []byte
 			sink = func(samples []float32) error {
-				_, err := p.stdin.Write(wav.PCM(samples))
-				return err
+				pcm := wav.PCM(samples)
+				if fallback {
+					streamed = append(streamed, pcm...)
+				}
+				if p == nil {
+					return nil
+				}
+				if _, err := p.stdin.Write(pcm); err != nil {
+					p.abandon()
+					p = nil
+					if !fallback {
+						return err
+					}
+					bufferedPlay = true
+				}
+				return nil
 			}
-			finish = p.close
+			finish = func() error {
+				if p == nil {
+					playAt = time.Since(start)
+					return playBufferedPCM(streamed)
+				}
+				return p.close()
+			}
 		} else if canPlayBuffered() {
 			// macOS afplay and Windows PowerShell's SoundPlayer need a
 			// complete file, so buffer and play once synthesis is done.
@@ -90,7 +118,11 @@ func main() {
 				audio = append(audio, samples...)
 				return nil
 			}
-			finish = func() error { return playBuffered(audio) }
+			finish = func() error {
+				// afplay needs the complete file, so playback starts now.
+				playAt = time.Since(start)
+				return playBuffered(audio)
+			}
 		} else {
 			fatal(fmt.Errorf("no audio player found (tried pw-play, pw-cat, paplay, aplay, ffplay, afplay, PowerShell); write a file with -o instead"))
 		}
@@ -138,7 +170,7 @@ func main() {
 		}
 	}
 
-	start := time.Now()
+	start = time.Now()
 	var firstAt time.Duration
 	var samples int
 	err = synth.Stream(text, float32(*speed), *first, *chunk, func(chunk []float32) error {
@@ -156,13 +188,18 @@ func main() {
 	}
 	if !*quiet {
 		seconds := float64(samples) / tts.SampleRate
+		total := time.Since(start)
 		if bufferedPlay {
-			fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, played after %v (%.0fx realtime)\n",
-				seconds, time.Since(start).Round(time.Millisecond), seconds/time.Since(start).Seconds())
+			if playAt == 0 {
+				playAt = total
+			}
+			fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, playback started after %v, total %v (%.0fx realtime)\n",
+				seconds, playAt.Round(time.Millisecond), total.Round(time.Millisecond),
+				seconds/total.Seconds())
 		} else {
 			fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, first audio after %v, total %v (%.0fx realtime)\n",
-				seconds, firstAt.Round(time.Millisecond), time.Since(start).Round(time.Millisecond),
-				seconds/time.Since(start).Seconds())
+				seconds, firstAt.Round(time.Millisecond), total.Round(time.Millisecond),
+				seconds/total.Seconds())
 		}
 	}
 }
@@ -178,7 +215,9 @@ func startStreamingPlayer() (*audioPlayer, error) {
 		{"pw-cat", "--playback", "--raw", "--format=s16", "--rate=24000", "--channels=1", "-"},
 		{"paplay", "--raw", "--format=s16le", "--rate=24000", "--channels=1"},
 		{"aplay", "-q", "-f", "S16_LE", "-r", "24000", "-c", "1"},
-		{"ffplay", "-f", "s16le", "-ar", "24000", "-ac", "1", "-nodisp", "-autoexit", "-loglevel", "quiet", "-"},
+		// ffplay decodes raw s16le as mono by default. Do not pass -ac:
+		// FFmpeg 9 removed it (in favor of -ch_layout) and fails to start.
+		{"ffplay", "-f", "s16le", "-ar", "24000", "-nodisp", "-autoexit", "-loglevel", "quiet", "-"},
 	}
 	for _, args := range candidates {
 		if _, err := exec.LookPath(args[0]); err != nil {
@@ -204,6 +243,15 @@ func (p *audioPlayer) close() error {
 	return p.cmd.Wait()
 }
 
+// abandon stops a player that failed while receiving audio.
+func (p *audioPlayer) abandon() {
+	p.stdin.Close()
+	if p.cmd.Process != nil {
+		_ = p.cmd.Process.Kill()
+	}
+	_ = p.cmd.Wait()
+}
+
 // canPlayBuffered reports whether the OS has a player that accepts a complete
 // WAV file. macOS ships afplay; Windows ships PowerShell and SoundPlayer.
 func canPlayBuffered() bool {
@@ -224,13 +272,30 @@ func hasCommand(name string) bool {
 
 // playBuffered writes a complete WAV and plays it with the system player.
 func playBuffered(audio []float32) error {
+	return playTempWAV(func(f *os.File) error {
+		return wav.Write(f, audio, tts.SampleRate)
+	})
+}
+
+// playBufferedPCM is playBuffered for already-encoded 16-bit PCM.
+func playBufferedPCM(pcm []byte) error {
+	return playTempWAV(func(f *os.File) error {
+		if _, err := f.Write(wav.Header(tts.SampleRate, len(pcm))); err != nil {
+			return err
+		}
+		_, err := f.Write(pcm)
+		return err
+	})
+}
+
+func playTempWAV(write func(*os.File) error) error {
 	f, err := os.CreateTemp("", "pdg-*.wav")
 	if err != nil {
 		return err
 	}
 	path := f.Name()
 	defer os.Remove(path)
-	if err := wav.Write(f, audio, tts.SampleRate); err != nil {
+	if err := write(f); err != nil {
 		f.Close()
 		return err
 	}
