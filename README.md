@@ -14,6 +14,24 @@ runtime, no ONNX Runtime, no model server, no GPU.
 
 The model is **Paradee v2g**, the smallest/fastest release.
 
+## Install
+
+Prebuilt archives for **Linux, macOS, and Windows** (amd64 and arm64) are on
+the [releases page](https://github.com/akhenak/pdgo/releases).
+
+Homebrew (macOS and Linux):
+
+```sh
+brew install akhenakh/tap/pdn
+```
+
+For out-of-vocabulary words (mostly names), install eSpeak NG; `pdn` uses it
+automatically when it is on `PATH`:
+
+```sh
+brew install espeak-ng       # or your distro's espeak-ng package
+```
+
 ## Build
 
 Go 1.27 or newer.
@@ -202,8 +220,9 @@ The model is ~3 M parameters, so the pure-Go kernels are enough.
 
 ## Licensing
 
-The Go code in this repository is **Apache-2.0** (see `LICENSE`). The default
-binary does not contain GPL code. It can call an installed `espeak-ng`
+The Go code in this repository is **Apache-2.0** (see `LICENSE`). The
+published release binaries are the default build: they do **not** contain GPL
+code and use an installed `espeak-ng` command for out-of-vocabulary words. It can call an installed `espeak-ng`
 command, which runs as a separate process.
 
 **eSpeak NG is GPL-3.0-or-later.** The optional `-tags espeakwasm` build
@@ -228,3 +247,10 @@ Paradee-8M v1.1 is by **Sahil Mahendrakar** (Apache-2.0) and was distilled from
 and lexicons come from [misaki](https://github.com/hexgrad/misaki)
 (Apache-2.0). The original pdn engine and release files are mesmer.tools'.
 See [LICENSES.md](LICENSES.md).
+
+## Releasing
+
+Push a tag (`vX.Y.Z`). `.github/workflows/release.yml` runs GoReleaser for
+Linux, macOS, and Windows on amd64/arm64 (SIMD build), then
+`scripts/brew-bump.sh` updates `akhenakh/homebrew-tap`. Configure a
+`TAP_GITHUB_TOKEN` repository secret with `contents: write` on the tap.

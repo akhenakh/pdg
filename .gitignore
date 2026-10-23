@@ -7,3 +7,4 @@
 # Build-time artifacts of the ONNX converter.
 *_pdn_opt.onnx
 *.test
+/dist/

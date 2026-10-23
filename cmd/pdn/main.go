@@ -20,7 +20,8 @@ import (
 	"github.com/akhenak/pdgo/internal/wav"
 )
 
-const version = "0.2.0"
+// version is set by GoReleaser (-X main.version=...); local builds say dev.
+var version = "dev"
 
 func main() {
 	out := flag.String("o", "pdn.wav", "output WAV file (- for stdout)")
