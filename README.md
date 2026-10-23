@@ -21,11 +21,21 @@ the [releases page](https://github.com/akhenak/pdg/releases). They are built
 with Go 1.27 SIMD and embed eSpeak NG WASM, so there is nothing else to
 install.
 
-Homebrew (macOS; Linux users use the release tarball):
+Homebrew (macOS):
 
 ```sh
 brew install akhenakh/tap/pdg
 ```
+
+On Arch Linux and Arch-based distributions, install the
+[`pdg` AUR package](https://aur.archlinux.org/packages/pdg):
+
+```sh
+yay -S pdg   # or: paru -S pdg
+```
+
+The package builds the shipped configuration (Go 1.27 SIMD with embedded
+eSpeak NG). On other Linux distributions, use the release tarball.
 
 ### Verifying a release
 
