@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akhenak/paradee-go/internal/tts"
-	"github.com/akhenak/paradee-go/internal/wav"
+	"github.com/akhenak/pdgo/internal/tts"
+	"github.com/akhenak/pdgo/internal/wav"
 )
 
 const version = "0.2.0"

@@ -1,4 +1,4 @@
-module github.com/akhenak/paradee-go
+module github.com/akhenak/pdgo
 
 go 1.27.1
 

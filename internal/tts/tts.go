@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"unicode"
 
-	"github.com/akhenak/paradee-go/internal/assets"
-	"github.com/akhenak/paradee-go/internal/engine"
-	"github.com/akhenak/paradee-go/internal/phonemize"
+	"github.com/akhenak/pdgo/internal/assets"
+	"github.com/akhenak/pdgo/internal/engine"
+	"github.com/akhenak/pdgo/internal/phonemize"
 )
 
 // SampleRate is Paradee's output rate.
