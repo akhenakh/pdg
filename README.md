@@ -57,6 +57,8 @@ works.
 ./pdg -speed 1.25 "A little faster."
 ./pdg -first 4 -chunk 16 "Lower latency."
 echo "Long text..." | ./pdg -o - > out.wav
+wl-paste | ./pdg                         # speak the clipboard (Wayland)
+pbpaste | ./pdg                          # speak the clipboard (macOS)
 ./pdg -play=false "Hello."               # writes pdg.wav
 ./pdg -seed 42 -o a.wav "Deterministic noise."
 ```
