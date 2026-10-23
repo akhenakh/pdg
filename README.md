@@ -5,7 +5,8 @@ executable turns text into 24 kHz audio: no Python library, no JavaScript
 runtime, no ONNX Runtime, no model server, no GPU.
 
 * 24 kHz mono WAV, ~3 M parameter model
-* model and lexicons embedded in the binary; no files to install
+* the model, lexicons and vocabulary are embedded with `go:embed`; the binary
+  has no runtime data files (`internal/assets/assets_test.go` guards this)
 * eSpeak NG for out-of-vocabulary words, either embedded as WASM or called as
   a command
 * streaming output and playback that starts in tens of milliseconds
