@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -68,16 +69,27 @@ func main() {
 
 	var sink func([]float32) error
 	var finish func() error
+	bufferedPlay := false
 	if *play {
-		p, err := startPlayer()
-		if err != nil {
-			fatal(err)
+		if p, err := startStreamingPlayer(); err == nil {
+			sink = func(samples []float32) error {
+				_, err := p.stdin.Write(wav.PCM(samples))
+				return err
+			}
+			finish = p.close
+		} else if canPlayBuffered() {
+			// macOS afplay and Windows PowerShell's SoundPlayer need a
+			// complete file, so buffer and play once synthesis is done.
+			bufferedPlay = true
+			var audio []float32
+			sink = func(samples []float32) error {
+				audio = append(audio, samples...)
+				return nil
+			}
+			finish = func() error { return playBuffered(audio) }
+		} else {
+			fatal(fmt.Errorf("no audio player found (tried pw-play, pw-cat, paplay, aplay, ffplay, afplay, PowerShell); write a file with -o instead"))
 		}
-		sink = func(samples []float32) error {
-			_, err := p.stdin.Write(wav.PCM(samples))
-			return err
-		}
-		finish = p.close
 	} else if *out == "-" {
 		if _, err := os.Stdout.Write(wav.Header(tts.SampleRate, 0xFFFFFFFF)); err != nil {
 			fatal(err)
@@ -140,9 +152,14 @@ func main() {
 	}
 	if !*quiet {
 		seconds := float64(samples) / tts.SampleRate
-		fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, first audio after %v, total %v (%.0fx realtime)\n",
-			seconds, firstAt.Round(time.Millisecond), time.Since(start).Round(time.Millisecond),
-			seconds/time.Since(start).Seconds())
+		if bufferedPlay {
+			fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, played after %v (%.0fx realtime)\n",
+				seconds, time.Since(start).Round(time.Millisecond), seconds/time.Since(start).Seconds())
+		} else {
+			fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, first audio after %v, total %v (%.0fx realtime)\n",
+				seconds, firstAt.Round(time.Millisecond), time.Since(start).Round(time.Millisecond),
+				seconds/time.Since(start).Seconds())
+		}
 	}
 }
 
@@ -151,7 +168,7 @@ type audioPlayer struct {
 	stdin io.WriteCloser
 }
 
-func startPlayer() (*audioPlayer, error) {
+func startStreamingPlayer() (*audioPlayer, error) {
 	candidates := [][]string{
 		{"pw-play", "--raw", "--format=s16", "--rate=24000", "--channels=1", "-"},
 		{"pw-cat", "--playback", "--raw", "--format=s16", "--rate=24000", "--channels=1", "-"},
@@ -181,6 +198,61 @@ func startPlayer() (*audioPlayer, error) {
 func (p *audioPlayer) close() error {
 	p.stdin.Close()
 	return p.cmd.Wait()
+}
+
+// canPlayBuffered reports whether the OS has a player that accepts a complete
+// WAV file. macOS ships afplay; Windows ships PowerShell and SoundPlayer.
+func canPlayBuffered() bool {
+	switch runtime.GOOS {
+	case "darwin":
+		_, err := exec.LookPath("afplay")
+		return err == nil
+	case "windows":
+		return hasCommand("powershell") || hasCommand("pwsh")
+	}
+	return false
+}
+
+func hasCommand(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// playBuffered writes a complete WAV and plays it with the system player.
+func playBuffered(audio []float32) error {
+	f, err := os.CreateTemp("", "pdg-*.wav")
+	if err != nil {
+		return err
+	}
+	path := f.Name()
+	defer os.Remove(path)
+	if err := wav.Write(f, audio, tts.SampleRate); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		cmd := exec.Command("afplay", path)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		return cmd.Run()
+	case "windows":
+		shell, err := exec.LookPath("powershell")
+		if err != nil {
+			shell, err = exec.LookPath("pwsh")
+			if err != nil {
+				return fmt.Errorf("PowerShell not found")
+			}
+		}
+		q := strings.ReplaceAll(path, "'", "''")
+		script := fmt.Sprintf("$p = New-Object System.Media.SoundPlayer '%s'; $p.PlaySync()", q)
+		cmd := exec.Command(shell, "-NoProfile", "-NonInteractive", "-Command", script)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		return cmd.Run()
+	}
+	return fmt.Errorf("buffered playback is not supported on %s", runtime.GOOS)
 }
 
 func fatal(err error) {

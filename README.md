@@ -8,7 +8,7 @@ runtime, no ONNX Runtime, no model server, no GPU.
 * the model, lexicons, vocabulary, and eSpeak NG fallback are embedded; the
   binary has no runtime data files (`internal/assets/assets_test.go` guards
   the core model/lexicons)
-* streaming output and playback that starts in tens of milliseconds
+* streaming output; playback starts in tens of milliseconds with a streaming player
 * Go 1.27 SIMD inference, scalar fallback available
 * ~30× realtime on a desktop CPU
 
@@ -64,6 +64,12 @@ echo "Long text..." | ./pdg -o - > out.wav
 Flags: `-o` output (`-` = stdout), `-speed` rate, `-seed` noise seed (0 =
 random), `-play`, `-quiet`, `-version`, `-first`/`-chunk` (frames in the first
 and later streaming chunks; 80 fps, 300 samples each).
+
+`-play` streams into `pw-play`, `pw-cat`, `paplay`, `aplay`, or `ffplay` when
+one is available. On macOS it falls back to the built-in `afplay`; on Windows
+it falls back to PowerShell's `System.Media.SoundPlayer`. Those two need a
+complete WAV, so sound starts after synthesis. Install `ffplay` (for example
+`brew install ffmpeg`) if you want early playback on macOS or Windows.
 
 ## Use as a library
 
@@ -183,7 +189,8 @@ one head subframe of overlap. The first chunk is 8 frames (0.1 s) and later
 chunks 24 frames (0.3 s) by default.
 
 `pdg -play` pipes 16-bit PCM straight into `pw-play`/`pw-cat`/`paplay`/
-`aplay`/`ffplay` as chunks arrive; `-o -` writes a streaming WAV. The decoder
+`aplay`/`ffplay` as chunks arrive (macOS `afplay` and Windows PowerShell are
+buffered fallbacks); `-o -` writes a streaming WAV. The decoder
 head is already independent of sentence length; the next latency step is
 chunking the trunk as well, plus more SIMD in the elementwise ops.
 
