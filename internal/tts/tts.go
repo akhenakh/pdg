@@ -20,6 +20,13 @@ const SampleRate = 24000
 // 512-token window.
 const maxPhonemes = 500
 
+// Default streaming chunk sizes, in 80 fps frames (300 samples each). The
+// first chunk is deliberately short so playback can start early.
+const (
+	DefaultFirstFrames = 8
+	DefaultChunkFrames = 24
+)
+
 // Synth is a ready-to-use text-to-speech engine. It is safe for concurrent
 // use.
 type Synth struct {
@@ -197,11 +204,11 @@ func (s *Synth) Stream(text string, speed float32, firstFrames, chunkFrames int,
 	if speed <= 0 {
 		speed = 1
 	}
-	if firstFrames < 1 {
-		firstFrames = 1
+	if firstFrames <= 0 {
+		firstFrames = DefaultFirstFrames
 	}
-	if chunkFrames < 1 {
-		chunkFrames = 1
+	if chunkFrames <= 0 {
+		chunkFrames = DefaultChunkFrames
 	}
 	for _, sentence := range SplitSentences(text) {
 		phonemes := s.g2p.Phonemize(sentence)

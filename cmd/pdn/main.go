@@ -27,8 +27,8 @@ func main() {
 	speed := flag.Float64("speed", 1, "speaking rate (2 = twice as fast)")
 	seed := flag.Uint64("seed", 0, "noise seed (0 = random)")
 	play := flag.Bool("play", false, "play while synthesizing instead of writing a file")
-	first := flag.Int("first", 8, "frames in the first audio chunk (80 fps, 300 samples each)")
-	chunk := flag.Int("chunk", 24, "frames per later audio chunk")
+	first := flag.Int("first", tts.DefaultFirstFrames, "frames in the first audio chunk (80 fps, 300 samples each)")
+	chunk := flag.Int("chunk", tts.DefaultChunkFrames, "frames per later audio chunk")
 	quiet := flag.Bool("quiet", false, "do not print statistics")
 	ver := flag.Bool("version", false, "print version")
 	flag.Usage = func() {
