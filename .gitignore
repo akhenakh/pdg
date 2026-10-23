@@ -1,0 +1,9 @@
+/pdn
+/pdn-espeak
+*.wav
+# Reference material used to build the model; not needed at build time.
+/paradee_v2f_lite.onnx
+/paradee-web-v2.zip
+# Build-time artifacts of the ONNX converter.
+*_pdn_opt.onnx
+*.test
