@@ -27,6 +27,15 @@ Homebrew (macOS; Linux users use the release tarball):
 brew install akhenakh/tap/pdg
 ```
 
+### Verifying a release
+
+Release archives carry [build provenance](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+signed by this repository's release workflow. Check a downloaded archive with:
+
+```sh
+gh attestation verify pdg_Linux_x86_64.tar.gz --repo akhenakh/pdg
+```
+
 ## Build
 
 Go 1.27 or newer.

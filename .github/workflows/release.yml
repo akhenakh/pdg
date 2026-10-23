@@ -12,6 +12,8 @@ jobs:
   release:
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     # Every target is CGO-free and cross-compiles from Linux.
     runs-on: ubuntu-latest
     steps:
@@ -33,6 +35,13 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attest release artifacts
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
 
       - name: Publish Homebrew formula
         env:
