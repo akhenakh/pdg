@@ -188,3 +188,61 @@ func lastIndexRuneSet(rs []rune, r rune) int {
 	}
 	return -1
 }
+
+// Stream synthesizes text and calls yield with each chunk as soon as it is
+// ready. The first chunk is firstFrames long (80 fps frames; 300 samples
+// each), later chunks are chunkFrames long. It returns when the text is
+// finished or yield returns an error.
+func (s *Synth) Stream(text string, speed float32, firstFrames, chunkFrames int, yield func([]float32) error) error {
+	if speed <= 0 {
+		speed = 1
+	}
+	if firstFrames < 1 {
+		firstFrames = 1
+	}
+	if chunkFrames < 1 {
+		chunkFrames = 1
+	}
+	for _, sentence := range SplitSentences(text) {
+		phonemes := s.g2p.Phonemize(sentence)
+		for _, piece := range SplitPhonemes(phonemes, maxPhonemes) {
+			ids := s.g2p.IDs(piece)
+			if len(ids) <= 2 {
+				continue
+			}
+			in := map[string]*engine.Tensor{
+				"input_ids": {Kind: engine.I64, Shape: []int{1, len(ids)}, I: ids},
+				"speed":     {Kind: engine.F32, Shape: []int{1}, F: []float32{speed}},
+			}
+			st, err := s.graph.Prepare(in, s.seed.Add(1))
+			if err != nil {
+				return err
+			}
+			total := st.N - 1
+			first := true
+			for a := 0; a < total; {
+				frames := chunkFrames
+				if first {
+					frames = firstFrames
+					first = false
+				}
+				b := a + frames*2
+				if b > total {
+					b = total
+				}
+				chunk, err := st.Chunk(a, b)
+				if err != nil {
+					st.Close()
+					return err
+				}
+				if err := yield(chunk); err != nil {
+					st.Close()
+					return err
+				}
+				a = b
+			}
+			st.Close()
+		}
+	}
+	return nil
+}

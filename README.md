@@ -42,10 +42,12 @@ GPL code. See [LICENSES.md](LICENSES.md).
 ./pdn -play "Say it out loud."           # pw-play, paplay, aplay or ffplay
 echo "Long text..." | ./pdn -o - > out.wav
 ./pdn -seed 42 -o a.wav "Deterministic noise."
+./pdn -first 4 -chunk 16 -play "Lower latency."
 ```
 
 Flags: `-o` output (`-` = stdout), `-speed` rate, `-seed` noise seed (0 =
-random), `-play`, `-quiet`, `-version`.
+random), `-play`, `-quiet`, `-version`, and `-first`/`-chunk` (frames in the
+first and later streaming chunks; 80 fps, 300 samples each).
 
 Text is split into sentences the way the model was trained (titles and
 initials are kept together), phonemized one sentence at a time, and cut at
@@ -113,11 +115,27 @@ fast enough without a general-purpose inference runtime.
 
 ## Streaming
 
-v2g is architecturally streamable (no LSTM, fixed per-channel norms), and the
-upstream `pdn` engine emits audio in 80 fps chunks. This port currently runs
-one sentence at a time through the whole graph, so first audio waits for the
-sentence. The graph is already split-friendly; a chunked decoder is the next
-step if sub-100 ms first sound matters.
+The graph is split at the point where the sentence-global work ends:
+
+```
+text side + durations + ConvNeXt trunk + noise   (once per sentence, node 727)
+        │  uT, uY, v2, wH, wL, wO, wZ, y5
+        ▼
+per-subframe decoder head                         (chunks of 150 samples)
+```
+
+`engine.Prepare` runs the prefix once, then `StreamState.Chunk(a,b)` runs the
+head on a time slice. The split is exact: streamed audio is **bit-identical**
+to the one-shot synthesis (`TestStreamingMatchesFull`). Chunks carry one
+subframe of overlap for the head's overlap-add; the first chunk is 8 frames
+(0.1 s) and later chunks 24 frames (0.3 s) by default.
+
+`pdn -play` pipes 16-bit PCM straight into `pw-play`/`paplay`/`aplay`/`ffplay`
+as chunks arrive; `-o -` writes a streaming WAV. Time to first audio is the
+sentence-global prefix plus the first chunk: about **0.17 s** when the first
+sentence is short, and about **0.55 s** for a single 4.3 s sentence on this
+machine. The remaining latency is the trunk itself; streaming it (the head is
+already independent) and vectorizing its convolutions are the next steps.
 
 ## Model and credits
 

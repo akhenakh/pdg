@@ -104,3 +104,74 @@ func BenchmarkSynth(b *testing.B) {
 }
 
 var _ = fmt.Sprint
+
+func TestStreamingMatchesFull(t *testing.T) {
+	g, err := LoadFile("../assets/paradee.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("testdata/cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Cases []testCase `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	ids := doc.Cases[0].IDs
+	mkIn := func() map[string]*Tensor {
+		return map[string]*Tensor{
+			"input_ids": {Kind: I64, Shape: []int{1, len(ids)}, I: append([]int64(nil), ids...)},
+			"speed":     {Kind: F32, Shape: []int{1}, F: []float32{1}},
+		}
+	}
+	const seed = 42
+	full, err := g.Run(mkIn(), seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := g.Prepare(mkIn(), seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if st.Total != len(full["waveform"].F) {
+		t.Fatalf("stream total %d, full %d", st.Total, len(full["waveform"].F))
+	}
+	var out []float32
+	start := time.Now()
+	for a := 0; a < st.N-1; {
+		b := a + 16 // 8 frames for the first chunk
+		if a > 0 {
+			b = a + 32 // then 16 frames
+		}
+		if b > st.N-1 {
+			b = st.N - 1
+		}
+		c, err := st.Chunk(a, b)
+		if err != nil {
+			t.Fatalf("chunk %d..%d: %v", a, b, err)
+		}
+		if a == 0 {
+			t.Logf("first chunk: %d samples after %v", len(c), time.Since(start).Round(time.Millisecond))
+		}
+		out = append(out, c...)
+		a = b
+	}
+	if len(out) != len(full["waveform"].F) {
+		t.Fatalf("streamed %d samples, full %d", len(out), len(full["waveform"].F))
+	}
+	var maxAbs float64
+	for i := range out {
+		d := math.Abs(float64(out[i] - full["waveform"].F[i]))
+		if d > maxAbs {
+			maxAbs = d
+		}
+	}
+	t.Logf("streamed audio: %d chunks, max|diff| vs full = %.3g", (st.N-1+15)/16, maxAbs)
+	if maxAbs > 1e-6 {
+		t.Fatalf("streamed audio differs from full by %g", maxAbs)
+	}
+}

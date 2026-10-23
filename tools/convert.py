@@ -170,6 +170,20 @@ def main():
         )
     outputs = [o.name for o in graph.output]
 
+    # v2g's decoder is streamable: everything up to and including the noise
+    # reshape ("uY") is sentence-global; the rest is per-subframe (150 samples
+    # each) and can run on a time slice.
+    producer = {}
+    for i, node in enumerate(nodes):
+        for out in node["out"]:
+            producer[out] = i
+    if "uY" not in producer or "yf" not in producer:
+        raise SystemExit("streaming split tensors uY/yf not found in graph")
+    stream = {
+        "split": producer["uY"] + 1,
+        "end": producer["yf"] + 1,
+        "subframe_samples": 150,
+    }
     header = {
         "format": "pdn-model",
         "version": 1,
@@ -177,6 +191,7 @@ def main():
         "sample_rate": 24000,
         "inputs": inputs,
         "outputs": outputs,
+        "stream": stream,
         "tensors": tensors,
         "nodes": nodes,
     }

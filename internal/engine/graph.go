@@ -28,6 +28,14 @@ type Graph struct {
 	init       map[string]*Tensor
 	lastUse    []map[string]bool // tensors that may be freed after node i
 
+	// Streaming split (v2g): nodes [0,Split) are the sentence-global text
+	// side + trunk + noise; nodes [Split,StreamEnd) are the per-subframe
+	// decoder head.
+	Split           int
+	StreamEnd       int
+	SubframeSamples int
+	streamOut       string
+
 	// noiseOverride replaces RandomUniformLike for deterministic tests.
 	noiseOverride *float32
 
@@ -46,6 +54,11 @@ type header struct {
 		Rank  int    `json:"rank"`
 	} `json:"inputs"`
 	Outputs []string `json:"outputs"`
+	Stream  *struct {
+		Split           int `json:"split"`
+		End             int `json:"end"`
+		SubframeSamples int `json:"subframe_samples"`
+	} `json:"stream"`
 	Tensors []struct {
 		Name  string `json:"name"`
 		DType string `json:"dtype"`
@@ -128,6 +141,18 @@ func Load(data []byte) (*Graph, error) {
 	for _, n := range h.Nodes {
 		g.Nodes = append(g.Nodes, Node{Op: n.Op, Name: n.Name, In: n.In, Out: n.Out, Attrs: n.Attrs})
 	}
+	if h.Stream != nil {
+		if h.Stream.Split <= 0 || h.Stream.End > len(g.Nodes) || h.Stream.Split >= h.Stream.End {
+			return nil, fmt.Errorf("invalid streaming split %d..%d for %d nodes", h.Stream.Split, h.Stream.End, len(g.Nodes))
+		}
+		g.Split = h.Stream.Split
+		g.StreamEnd = h.Stream.End
+		g.SubframeSamples = h.Stream.SubframeSamples
+		if len(g.Nodes[g.StreamEnd-1].Out) == 0 {
+			return nil, fmt.Errorf("streaming end node has no output")
+		}
+		g.streamOut = g.Nodes[g.StreamEnd-1].Out[0]
+	}
 	g.computeLastUse()
 	return g, nil
 }
@@ -173,31 +198,8 @@ func (g *Graph) Run(inputs map[string]*Tensor, seed uint64) (map[string]*Tensor,
 		env[k] = v
 	}
 	rng := rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
-	for i := range g.Nodes {
-		n := &g.Nodes[i]
-		if err := g.exec(n, env, rng); err != nil {
-			return nil, fmt.Errorf("node %d %s %q: %w", i, n.Op, n.Name, err)
-		}
-		if g.trace != nil {
-			g.trace(i, n, env)
-		}
-		if g.lastUse[i] != nil {
-			for name := range g.lastUse[i] {
-				if _, keep := g.init[name]; keep {
-					continue
-				}
-				isOutput := false
-				for _, o := range g.Outputs {
-					if o == name {
-						isOutput = true
-						break
-					}
-				}
-				if !isOutput {
-					delete(env, name)
-				}
-			}
-		}
+	if err := g.runRange(env, 0, len(g.Nodes), rng, nil); err != nil {
+		return nil, err
 	}
 	out := make(map[string]*Tensor, len(g.Outputs))
 	for _, name := range g.Outputs {
@@ -208,6 +210,42 @@ func (g *Graph) Run(inputs map[string]*Tensor, seed uint64) (map[string]*Tensor,
 		out[name] = t
 	}
 	return out, nil
+}
+
+// runRange executes nodes [from,to), freeing dead tensors unless they are in
+// keep (the streaming boundary) or a graph output.
+func (g *Graph) runRange(env map[string]*Tensor, from, to int, rng *rand.Rand, keep map[string]bool) error {
+	for i := from; i < to; i++ {
+		n := &g.Nodes[i]
+		if err := g.exec(n, env, rng); err != nil {
+			return fmt.Errorf("node %d %s %q: %w", i, n.Op, n.Name, err)
+		}
+		if g.trace != nil {
+			g.trace(i, n, env)
+		}
+		if g.lastUse[i] == nil {
+			continue
+		}
+		for name := range g.lastUse[i] {
+			if keep[name] {
+				continue
+			}
+			if _, isInit := g.init[name]; isInit {
+				continue
+			}
+			isOutput := false
+			for _, o := range g.Outputs {
+				if o == name {
+					isOutput = true
+					break
+				}
+			}
+			if !isOutput {
+				delete(env, name)
+			}
+		}
+	}
+	return nil
 }
 
 // Attr helpers -------------------------------------------------------------

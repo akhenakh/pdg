@@ -67,3 +67,36 @@ func TestSynthesize(t *testing.T) {
 		t.Fatalf("peak %f out of range", peak)
 	}
 }
+
+func TestStreamMatchesSynthesize(t *testing.T) {
+	if testing.Short() {
+		t.Skip("loads the model")
+	}
+	s, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := "Hello from Paradee. This is streamed audio."
+	s.SetSeed(11)
+	want, err := s.Synthesize(text, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetSeed(11)
+	var got []float32
+	err = s.Stream(text, 1, 8, 24, func(chunk []float32) error {
+		got = append(got, chunk...)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("streamed %d samples, synthesized %d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("sample %d: streamed %g, synthesized %g", i, got[i], want[i])
+		}
+	}
+}
