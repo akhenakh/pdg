@@ -1,0 +1,10 @@
+# Checkouts are LF everywhere; CRLF would change embedded asset contents.
+* text=auto eol=lf
+
+# Binary assets: never normalize.
+*.bin binary
+*.wasm binary
+*.onnx binary
+*.zip binary
+*.f32 binary
+internal/phonemize/wasm/data/** binary

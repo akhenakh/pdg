@@ -41,6 +41,8 @@ type lexicon struct {
 }
 
 func parseLexicon(text string) *lexicon {
+	// The packed file is LF-only, but checkouts on Windows may hand us CRLF.
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	lex := &lexicon{keys: make([]string, 0, len(lines)), vals: make([]*lexValue, 0, len(lines))}
 	prev := ""
