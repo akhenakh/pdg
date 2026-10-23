@@ -21,7 +21,7 @@ the [releases page](https://github.com/akhenak/pdg/releases). They are built
 with Go 1.27 SIMD and embed eSpeak NG WASM, so there is nothing else to
 install.
 
-Homebrew (macOS and Linux):
+Homebrew (macOS; Linux users use the release tarball):
 
 ```sh
 brew install akhenakh/tap/pdg
