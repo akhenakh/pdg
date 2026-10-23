@@ -247,7 +247,8 @@ func playBuffered(audio []float32) error {
 			}
 		}
 		q := strings.ReplaceAll(path, "'", "''")
-		script := fmt.Sprintf("$p = New-Object System.Media.SoundPlayer '%s'; $p.PlaySync()", q)
+		// PowerShell 7 needs the assembly loaded; Windows PowerShell 5.1 has it.
+		script := fmt.Sprintf("Add-Type -AssemblyName System.Windows.Extensions -ErrorAction SilentlyContinue; $p = New-Object System.Media.SoundPlayer '%s'; $p.PlaySync()", q)
 		cmd := exec.Command(shell, "-NoProfile", "-NonInteractive", "-Command", script)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		return cmd.Run()
