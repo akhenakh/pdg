@@ -169,6 +169,47 @@ text ──► misaki-lite G2P ──► phoneme ids ──► Paradee v2g graph
 executor against ONNX Runtime sample-for-sample. On the three reference
 sentences the waveform differs by 0.007–0.05 % RMS, i.e. float rounding.
 
+### Regenerating `paradee.bin`
+
+`internal/assets/paradee.bin` is not the published ONNX file as-is: it is the
+optimized graph re-serialized into the `PDNG` container that `internal/engine`
+executes. It is built from **Paradee v2g, fp32 compute**
+(`paradee_v2g_noint8.onnx`, the graph the web build runs on WebGPU).
+
+```sh
+python3 -m venv .venv && . .venv/bin/activate
+pip install onnx onnxruntime numpy
+make convert            # = python3 tools/convert.py
+```
+
+`tools/convert.py`:
+
+1. downloads `paradee_v2g_noint8.onnx` from
+   `https://mesmer.tools/paradee/onnx/` to the `--onnx` path (default
+   `paradee_v2g_noint8.onnx` in the current directory) when it does not exist;
+2. runs ONNX Runtime's BASIC optimizer once, constant-folding the int4/int6/int8
+   weight unpacking and the tokenizer/vocab tables into plain fp32 tensors
+   (this writes `<name>_pdg_opt.onnx` next to the source, an ignored build
+   artifact);
+3. writes `internal/assets/paradee.bin`: `PDNG` magic, format version, a JSON
+   header (nodes, tensor directory, streaming split), then the raw tensor
+   blob. It prints node/tensor counts and the op histogram.
+
+To convert a graph you already have, or write somewhere else:
+
+```sh
+python3 tools/convert.py --onnx ~/Downloads/paradee_v2g_noint8.onnx \
+  --out internal/assets/paradee.bin
+```
+
+Python, ONNX and ONNX Runtime are build-time only: `internal/assets` embeds the
+result with `go:embed`, so pdg still needs nothing at runtime. After
+regenerating, run `make test` — the engine tests replay ONNX Runtime fixtures.
+If the graph itself changed, refresh those fixtures too with
+`PARADEE_ONNX=/path/to/paradee_v2g_noint8.onnx python3 tools/make_testdata.py`
+(it also needs the `check.json` from the Paradee web bundle for the reference
+token ids).
+
 ## Performance
 
 Measured on one AMD Ryzen 9 7900X, CPU only:
