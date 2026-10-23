@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-WORK=${WORK:-/tmp/pdn-espeak-build}
+WORK=${WORK:-/tmp/pdg-espeak-build}
 WASI_SDK=${WASI_SDK:-$WORK/wasi-sdk}
 WASI_VERSION=34.0
 ESPEAK_REPO=https://github.com/espeak-ng/espeak-ng.git

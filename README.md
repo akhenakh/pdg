@@ -1,35 +1,30 @@
-# pdn
+# PDG
 
-`pdn` is a **zero-install, pure-CPU text-to-speech binary**. One static Go
+`pdg` is a **zero-install, pure-CPU text-to-speech binary**. One static Go
 executable turns text into 24 kHz audio: no Python library, no JavaScript
 runtime, no ONNX Runtime, no model server, no GPU.
 
 * 24 kHz mono WAV, ~3 M parameter model
-* the model, lexicons and vocabulary are embedded with `go:embed`; the binary
-  has no runtime data files (`internal/assets/assets_test.go` guards this)
-* eSpeak NG for out-of-vocabulary words, either embedded as WASM or called as
-  a command
+* the model, lexicons, vocabulary, and eSpeak NG fallback are embedded; the
+  binary has no runtime data files (`internal/assets/assets_test.go` guards
+  the core model/lexicons)
 * streaming output and playback that starts in tens of milliseconds
-* ~23× realtime scalar, ~30× with Go 1.27 SIMD on a desktop CPU
+* Go 1.27 SIMD inference, scalar fallback available
+* ~30× realtime on a desktop CPU
 
 The model is **Paradee v2g**, the smallest/fastest release.
 
 ## Install
 
 Prebuilt archives for **Linux, macOS, and Windows** (amd64 and arm64) are on
-the [releases page](https://github.com/akhenak/pdgo/releases).
+the [releases page](https://github.com/akhenak/pdg/releases). They are built
+with Go 1.27 SIMD and embed eSpeak NG WASM, so there is nothing else to
+install.
 
 Homebrew (macOS and Linux):
 
 ```sh
-brew install akhenakh/tap/pdn
-```
-
-For out-of-vocabulary words (mostly names), install eSpeak NG; `pdn` uses it
-automatically when it is on `PATH`:
-
-```sh
-brew install espeak-ng       # or your distro's espeak-ng package
+brew install akhenakh/tap/pdg
 ```
 
 ## Build
@@ -37,16 +32,17 @@ brew install espeak-ng       # or your distro's espeak-ng package
 Go 1.27 or newer.
 
 ```sh
-make build          # GOEXPERIMENT=simd (recommended)
-make build-scalar   # portable scalar fallback
-make build-espeak   # SIMD + embedded eSpeak NG WASM
+make build              # shipped build: SIMD + embedded eSpeak NG WASM
+make build-noespeak     # SIMD, no GPL eSpeak; uses espeak-ng from PATH
+make build-scalar       # portable fallback, no SIMD, no eSpeak WASM
 ```
 
 or directly:
 
 ```sh
-GOEXPERIMENT=simd go build -trimpath -o pdn ./cmd/pdn
-go build -trimpath -o pdn ./cmd/pdn          # scalar fallback
+GOEXPERIMENT=simd go build -trimpath -tags espeakwasm -o pdg ./cmd/pdg
+GOEXPERIMENT=simd go build -trimpath -o pdg ./cmd/pdg   # without eSpeak WASM
+go build -trimpath -o pdg ./cmd/pdg                     # scalar
 ```
 
 `-tags espeakwasm` embeds eSpeak NG and runs it in-process with
@@ -56,13 +52,13 @@ works.
 ## Use
 
 ```sh
-./pdn "Hello, world."                    # writes pdn.wav
-./pdn -o hello.wav "Hello, world."
-./pdn -speed 1.25 "A little faster."
-./pdn -play "Say it out loud."           # pw-play, paplay, aplay or ffplay
-echo "Long text..." | ./pdn -o - > out.wav
-./pdn -first 4 -chunk 16 -play "Lower latency."
-./pdn -seed 42 -o a.wav "Deterministic noise."
+./pdg "Hello, world."                    # writes pdg.wav
+./pdg -o hello.wav "Hello, world."
+./pdg -speed 1.25 "A little faster."
+./pdg -play "Say it out loud."           # pw-play, paplay, aplay or ffplay
+echo "Long text..." | ./pdg -o - > out.wav
+./pdg -first 4 -chunk 16 -play "Lower latency."
+./pdg -seed 42 -o a.wav "Deterministic noise."
 ```
 
 Flags: `-o` output (`-` = stdout), `-speed` rate, `-seed` noise seed (0 =
@@ -78,48 +74,49 @@ import (
 	"context"
 	"os"
 
-	"github.com/akhenak/pdgo"
+	"github.com/akhenak/pdg"
 )
 
-e, err := pdgo.New()
+e, err := pdg.New()
 if err != nil {
 	panic(err)
 }
 audio, err := e.Synthesize(context.Background(), "Hello from Go.",
-	pdgo.WithSpeed(1.1))
+	pdg.WithSpeed(1.1))
 if err != nil {
 	panic(err)
 }
 f, _ := os.Create("hello.wav")
 defer f.Close()
-if err := pdgo.WriteWAV(f, audio); err != nil {
+if err := pdg.WriteWAV(f, audio); err != nil {
 	panic(err)
 }
 ```
 
-`Synthesize` returns mono `float32` at `pdgo.SampleRate` (24 kHz). For early
+`Synthesize` returns mono `float32` at `pdg.SampleRate` (24 kHz). For early
 playback, stream instead:
 
 ```go
 err = e.Stream(ctx, text, func(chunk []float32) error {
-	_, err := player.Write(pdgo.PCM(chunk)) // raw s16le
+	_, err := player.Write(pdg.PCM(chunk)) // raw s16le
 	return err
-}, pdgo.WithChunking(8, 24), pdgo.WithSeed(1))
+}, pdg.WithChunking(8, 24), pdg.WithSeed(1))
 ```
 
 Options: `WithSpeed`, `WithSeed` (reproducible noise), `WithChunking`
-(first/later chunk sizes in 80 fps frames). `pdgo.PCM` converts a chunk to
+(first/later chunk sizes in 80 fps frames). `pdg.PCM` converts a chunk to
 16-bit PCM for a sound device. An `Engine` is safe for concurrent use;
 cancellation is checked between chunks. See `examples/hello` for a complete
 program.
 
 ## Goals
 
-* A **single binary** that does TTS on a fresh Linux machine: no Python
-  packages, no Node/Python runtime, no shared inference library to install.
+* A **single binary** that does TTS on a fresh machine: no Python packages, no
+  Node/Python runtime, no shared inference library to install.
 * **Pure CPU inference**, even when that is slower than a GPU path, so there
   are no CUDA/driver/runtime dependencies.
-* Keep the default build free of GPL code (see [Licensing](#licensing)).
+* An **Apache-2.0** build is available; the shipped release additionally
+  embeds eSpeak NG as an isolated WASM artifact for names and rare words.
 
 ## How it works
 
@@ -140,10 +137,10 @@ text ──► misaki-lite G2P ──► phoneme ids ──► Paradee v2g graph
   bundle: gold/silver lexicons, stress rules, stemming, numbers, currency,
   tokenizer and subtoken groups. For words outside the lexicons it uses
   eSpeak NG:
-  * default build: the installed `espeak-ng`/`espeak` command as a
-    subprocess;
-  * `-tags espeakwasm`: a WASI build of eSpeak NG embedded in the binary and
-    executed by wazero, so no external command is needed.
+  * shipped build (`-tags espeakwasm`): a WASI build of eSpeak NG embedded in
+    the binary and executed by wazero, no external command;
+  * `build-noespeak` / default build: the installed `espeak-ng`/`espeak`
+    command as a subprocess, falling back to letter names if absent.
 * **`internal/tts`** handles sentence/clause splitting, chunked synthesis and
   concatenation.
 
@@ -185,7 +182,7 @@ on a time slice. Streamed audio is **bit-identical** to one-shot synthesis
 one head subframe of overlap. The first chunk is 8 frames (0.1 s) and later
 chunks 24 frames (0.3 s) by default.
 
-`pdn -play` pipes 16-bit PCM straight into `pw-play`/`pw-cat`/`paplay`/
+`pdg -play` pipes 16-bit PCM straight into `pw-play`/`pw-cat`/`paplay`/
 `aplay`/`ffplay` as chunks arrive; `-o -` writes a streaming WAV. The decoder
 head is already independent of sentence length; the next latency step is
 chunking the trunk as well, plus more SIMD in the elementwise ops.
@@ -220,17 +217,15 @@ The model is ~3 M parameters, so the pure-Go kernels are enough.
 
 ## Licensing
 
-The Go code in this repository is **Apache-2.0** (see `LICENSE`). The
-published release binaries are the default build: they do **not** contain GPL
-code and use an installed `espeak-ng` command for out-of-vocabulary words. It can call an installed `espeak-ng`
-command, which runs as a separate process.
+The Go code in this repository is **Apache-2.0** (see `LICENSE`).
 
-**eSpeak NG is GPL-3.0-or-later.** The optional `-tags espeakwasm` build
-embeds the eSpeak NG WASI module and its data. That WASM is executed by
-wazero as an isolated, interpreted module rather than linked into the Go
-binary; on that basis this project keeps its own code Apache-2.0 and treats
-the eSpeak artifact as a separate component. This is a project position, not
-legal advice: if you redistribute a binary built with `-tags espeakwasm`,
+**eSpeak NG is GPL-3.0-or-later.** The shipped release binaries are built with
+`-tags espeakwasm` and embed the eSpeak NG WASI module and its data. That WASM
+is executed by wazero as an isolated, interpreted module rather than linked
+into the Go binary; on that basis the project keeps its own code Apache-2.0
+and treats the eSpeak artifact as a separate component. The default
+`build-noespeak`/`build-scalar` binaries contain no eSpeak code. This is a
+project position, not legal advice: if you redistribute the embedded build,
 satisfy yourself about GPL-3.0 obligations first.
 
 ## Credits
@@ -251,6 +246,6 @@ See [LICENSES.md](LICENSES.md).
 ## Releasing
 
 Push a tag (`vX.Y.Z`). `.github/workflows/release.yml` runs GoReleaser for
-Linux, macOS, and Windows on amd64/arm64 (SIMD build), then
-`scripts/brew-bump.sh` updates `akhenakh/homebrew-tap`. Configure a
+Linux, macOS, and Windows on amd64/arm64 with Go 1.27 SIMD and embedded eSpeak
+NG, then `scripts/brew-bump.sh` updates `akhenakh/homebrew-tap`. Configure a
 `TAP_GITHUB_TOKEN` repository secret with `contents: write` on the tap.

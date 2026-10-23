@@ -2,7 +2,7 @@
 """Regenerate engine test fixtures (deterministic noise) from ONNX Runtime.
 
 The only nondeterministic node in the graph is RandomUniformLike.  For the
-fixtures it is replaced by ConstantOfShape(0.5), which gives ORT and pdn
+fixtures it is replaced by ConstantOfShape(0.5), which gives ORT and pdg
 byte-comparable inputs.
 """
 

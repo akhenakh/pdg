@@ -1,9 +1,9 @@
-// Command pdn speaks text with Paradee v2g, entirely on the CPU.
+// Command pdg speaks text with Paradee v2g, entirely on the CPU.
 //
-//	pdn "Hello, world."              -> pdn.wav
-//	pdn -o hello.wav "Hello."        -> hello.wav
-//	echo "Long text" | pdn -o - > a.wav
-//	pdn -play "Say it out loud."
+//	pdg "Hello, world."              -> pdg.wav
+//	pdg -o hello.wav "Hello."        -> hello.wav
+//	echo "Long text" | pdg -o - > a.wav
+//	pdg -play "Say it out loud."
 package main
 
 import (
@@ -16,15 +16,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akhenak/pdgo/internal/tts"
-	"github.com/akhenak/pdgo/internal/wav"
+	"github.com/akhenak/pdg/internal/tts"
+	"github.com/akhenak/pdg/internal/wav"
 )
 
 // version is set by GoReleaser (-X main.version=...); local builds say dev.
 var version = "dev"
 
 func main() {
-	out := flag.String("o", "pdn.wav", "output WAV file (- for stdout)")
+	out := flag.String("o", "pdg.wav", "output WAV file (- for stdout)")
 	speed := flag.Float64("speed", 1, "speaking rate (2 = twice as fast)")
 	seed := flag.Uint64("seed", 0, "noise seed (0 = random)")
 	play := flag.Bool("play", false, "play while synthesizing instead of writing a file")
@@ -33,13 +33,13 @@ func main() {
 	quiet := flag.Bool("quiet", false, "do not print statistics")
 	ver := flag.Bool("version", false, "print version")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "pdn %s - Paradee text to speech\n\nusage: pdn [flags] [text...]\n\nflags:\n", version)
+		fmt.Fprintf(os.Stderr, "pdg %s - Paradee text to speech\n\nusage: pdg [flags] [text...]\n\nflags:\n", version)
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
 	if *ver {
-		fmt.Println("pdn", version)
+		fmt.Println("pdg", version)
 		return
 	}
 
@@ -116,7 +116,7 @@ func main() {
 				return err
 			}
 			if !*quiet {
-				fmt.Fprintf(os.Stderr, "pdn: wrote %s\n", *out)
+				fmt.Fprintf(os.Stderr, "pdg: wrote %s\n", *out)
 			}
 			return nil
 		}
@@ -140,7 +140,7 @@ func main() {
 	}
 	if !*quiet {
 		seconds := float64(samples) / tts.SampleRate
-		fmt.Fprintf(os.Stderr, "pdn: %.1fs of audio, first audio after %v, total %v (%.0fx realtime)\n",
+		fmt.Fprintf(os.Stderr, "pdg: %.1fs of audio, first audio after %v, total %v (%.0fx realtime)\n",
 			seconds, firstAt.Round(time.Millisecond), time.Since(start).Round(time.Millisecond),
 			seconds/time.Since(start).Seconds())
 	}
@@ -184,6 +184,6 @@ func (p *audioPlayer) close() error {
 }
 
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "pdn:", err)
+	fmt.Fprintln(os.Stderr, "pdg:", err)
 	os.Exit(1)
 }

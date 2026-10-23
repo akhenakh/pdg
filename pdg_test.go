@@ -1,4 +1,4 @@
-package pdgo_test
+package pdg_test
 
 import (
 	"bytes"
@@ -7,19 +7,19 @@ import (
 	"math"
 	"testing"
 
-	"github.com/akhenak/pdgo"
+	"github.com/akhenak/pdg"
 )
 
 func TestSynthesize(t *testing.T) {
-	e, err := pdgo.New()
+	e, err := pdg.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	audio, err := e.Synthesize(context.Background(), "Hello from the pdgo library.", pdgo.WithSeed(7))
+	audio, err := e.Synthesize(context.Background(), "Hello from the pdg library.", pdg.WithSeed(7))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(audio) < pdgo.SampleRate/4 {
+	if len(audio) < pdg.SampleRate/4 {
 		t.Fatalf("too few samples: %d", len(audio))
 	}
 	var peak float64
@@ -32,12 +32,12 @@ func TestSynthesize(t *testing.T) {
 }
 
 func TestStreamMatchesSynthesize(t *testing.T) {
-	e, err := pdgo.New()
+	e, err := pdg.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := "Hello from the pdgo library. Streaming should match."
-	want, err := e.Synthesize(context.Background(), text, pdgo.WithSeed(11))
+	text := "Hello from the pdg library. Streaming should match."
+	want, err := e.Synthesize(context.Background(), text, pdg.WithSeed(11))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestStreamMatchesSynthesize(t *testing.T) {
 	err = e.Stream(context.Background(), text, func(chunk []float32) error {
 		got = append(got, chunk...)
 		return nil
-	}, pdgo.WithSeed(11), pdgo.WithChunking(4, 8))
+	}, pdg.WithSeed(11), pdg.WithChunking(4, 8))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,16 +68,16 @@ func TestStreamMatchesSynthesize(t *testing.T) {
 }
 
 func TestWriteWAV(t *testing.T) {
-	e, err := pdgo.New()
+	e, err := pdg.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	audio, err := e.Synthesize(context.Background(), "Wave file.", pdgo.WithSeed(1))
+	audio, err := e.Synthesize(context.Background(), "Wave file.", pdg.WithSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	if err := pdgo.WriteWAV(&buf, audio); err != nil {
+	if err := pdg.WriteWAV(&buf, audio); err != nil {
 		t.Fatal(err)
 	}
 	b := buf.Bytes()
@@ -87,11 +87,11 @@ func TestWriteWAV(t *testing.T) {
 }
 
 func TestEmptyAndCancelled(t *testing.T) {
-	e, err := pdgo.New()
+	e, err := pdg.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Synthesize(context.Background(), "   "); !errors.Is(err, pdgo.ErrNoSpeech) {
+	if _, err := e.Synthesize(context.Background(), "   "); !errors.Is(err, pdg.ErrNoSpeech) {
 		t.Fatalf("empty text: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

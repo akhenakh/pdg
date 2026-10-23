@@ -1,4 +1,4 @@
-module github.com/akhenak/pdgo
+module github.com/akhenak/pdg
 
 go 1.27.1
 

@@ -1,4 +1,4 @@
-// Package assets holds the data embedded in the pdn binary.
+// Package assets holds the data embedded in the pdg binary.
 package assets
 
 import _ "embed"

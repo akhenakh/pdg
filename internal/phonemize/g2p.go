@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/akhenak/pdgo/internal/assets"
+	"github.com/akhenak/pdg/internal/assets"
 )
 
 const (

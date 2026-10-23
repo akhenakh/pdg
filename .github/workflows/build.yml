@@ -11,12 +11,27 @@ permissions:
 
 jobs:
   test:
-    name: test (${{ matrix.os }}, SIMD)
+    name: test (${{ matrix.os }}, SIMD + eSpeak WASM)
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      GOEXPERIMENT: simd
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: test
+        run: go test -tags espeakwasm ./...
+
+  simd:
+    name: test (SIMD, no eSpeak WASM)
+    runs-on: ubuntu-latest
     env:
       GOEXPERIMENT: simd
     steps:

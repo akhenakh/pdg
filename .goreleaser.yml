@@ -5,13 +5,15 @@ before:
     - go mod tidy
 
 builds:
-  - id: pdn
-    main: ./cmd/pdn
-    binary: pdn
+  - id: pdg
+    main: ./cmd/pdg
+    binary: pdg
     env:
       - CGO_ENABLED=0
       # Go 1.27's SIMD experiment: vectorized matmul/convolution kernels.
       - GOEXPERIMENT=simd
+    tags:
+      - espeakwasm
     flags:
       - -trimpath
     ldflags:
@@ -27,19 +29,19 @@ builds:
 archives:
   - id: default
     ids:
-      - pdn
+      - pdg
     formats: ['tar.gz']
     format_overrides:
       - goos: windows
         formats: ['zip']
     name_template: >-
-      pdn_
+      pdg_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else }}{{ .Arch }}{{ end }}
 
 checksum:
-  name_template: "pdn_{{ .Version }}_checksums.txt"
+  name_template: "pdg_{{ .Version }}_checksums.txt"
 
 changelog:
   sort: asc

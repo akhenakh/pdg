@@ -1,4 +1,4 @@
-// Command hello shows how to use pdgo as a library.
+// Command hello shows how to use pdg as a library.
 package main
 
 import (
@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/akhenak/pdgo"
+	"github.com/akhenak/pdg"
 )
 
 func main() {
-	e, err := pdgo.New()
+	e, err := pdg.New()
 	if err != nil {
 		panic(err)
 	}
-	audio, err := e.Synthesize(context.Background(), "Hello from the pdgo library.", pdgo.WithSpeed(1))
+	audio, err := e.Synthesize(context.Background(), "Hello from the pdg library.", pdg.WithSpeed(1))
 	if err != nil {
 		panic(err)
 	}
@@ -22,11 +22,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := pdgo.WriteWAV(f, audio); err != nil {
+	if err := pdg.WriteWAV(f, audio); err != nil {
 		panic(err)
 	}
 	if err := f.Close(); err != nil {
 		panic(err)
 	}
-	fmt.Printf("hello.wav: %.1f s\n", float64(len(audio))/pdgo.SampleRate)
+	fmt.Printf("hello.wav: %.1f s\n", float64(len(audio))/pdg.SampleRate)
 }

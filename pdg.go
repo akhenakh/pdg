@@ -1,20 +1,20 @@
-// Package pdgo is a zero-install, pure-Go text-to-speech engine.
+// Package pdg is a zero-install, pure-Go text-to-speech engine.
 //
 // It turns text into 24 kHz mono float32 audio on the CPU, with no Python,
 // JavaScript, ONNX Runtime, or GPU dependency. The model and lexicons are
 // embedded in the binary.
 //
-//	e, err := pdgo.New()
+//	e, err := pdg.New()
 //	if err != nil { ... }
 //	audio, err := e.Synthesize(context.Background(), "Hello from Go.")
 //	if err != nil { ... }
 //	f, _ := os.Create("hello.wav")
 //	defer f.Close()
-//	pdgo.WriteWAV(f, audio)
+//	pdg.WriteWAV(f, audio)
 //
 // For playback or streaming, use Stream. An Engine is safe for concurrent
 // use; pass WithSeed for reproducible renders.
-package pdgo
+package pdg
 
 import (
 	"context"
@@ -24,15 +24,15 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/akhenak/pdgo/internal/tts"
-	"github.com/akhenak/pdgo/internal/wav"
+	"github.com/akhenak/pdg/internal/tts"
+	"github.com/akhenak/pdg/internal/wav"
 )
 
 // SampleRate is the output sample rate in Hz.
 const SampleRate = tts.SampleRate
 
 // ErrNoSpeech is returned when the text has nothing to speak.
-var ErrNoSpeech = errors.New("pdgo: no speakable text")
+var ErrNoSpeech = errors.New("pdg: no speakable text")
 
 // Engine is a loaded text-to-speech engine. It is safe for concurrent use.
 type Engine struct {
@@ -44,7 +44,7 @@ type Engine struct {
 func New() (*Engine, error) {
 	s, err := tts.New()
 	if err != nil {
-		return nil, fmt.Errorf("pdgo: %w", err)
+		return nil, fmt.Errorf("pdg: %w", err)
 	}
 	return &Engine{synth: s}, nil
 }
@@ -156,7 +156,7 @@ func (e *Engine) Synthesize(ctx context.Context, text string, opts ...Option) ([
 // interruptible.
 func (e *Engine) Stream(ctx context.Context, text string, yield func([]float32) error, opts ...Option) error {
 	if yield == nil {
-		return errors.New("pdgo: nil yield function")
+		return errors.New("pdg: nil yield function")
 	}
 	if strings.TrimSpace(text) == "" {
 		return ErrNoSpeech

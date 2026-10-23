@@ -78,7 +78,7 @@ type header struct {
 // Load parses a model produced by tools/convert.py.
 func Load(data []byte) (*Graph, error) {
 	if len(data) < 12 || string(data[:4]) != "PDNG" {
-		return nil, fmt.Errorf("not a pdn model")
+		return nil, fmt.Errorf("not a pdg model")
 	}
 	version := binary.LittleEndian.Uint32(data[4:8])
 	if version != 1 {

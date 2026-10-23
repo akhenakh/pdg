@@ -8,7 +8,7 @@ import (
 )
 
 // eSpeak NG is an optional runtime fallback for words that are in neither
-// lexicon (mostly names). It is deliberately not bundled: pdn stays a pure Go
+// lexicon (mostly names). It is deliberately not bundled: pdg stays a pure Go
 // binary, and users who want the upstream-quality fallback can install
 // espeak-ng. Without it, unknown words are spelled with letter names.
 //

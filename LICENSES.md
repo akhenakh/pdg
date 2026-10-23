@@ -2,9 +2,10 @@
 
 ## Project code
 
-The Go code in this repository is **Apache-2.0** (see `LICENSE`). The default
-`pdn` binary — including the embedded model, misaki lexicons, and the scalar or
-SIMD inference kernels — is distributed under those terms.
+The Go code in this repository is **Apache-2.0** (see `LICENSE`). The `pdg` code — including the embedded model, misaki lexicons, and the
+scalar or SIMD inference kernels — is distributed under those terms. The
+shipped release binaries additionally embed the optional eSpeak WASM
+component described below.
 
 ## Embedded model and front end
 
@@ -20,24 +21,26 @@ SIMD inference kernels — is distributed under those terms.
 * The G2P port is based on `misaki-lite` from the Paradee web bundle
   (Apache-2.0), itself a port of misaki's English G2P.
 
-## eSpeak NG (optional)
+## eSpeak NG
 
 **eSpeak NG is GPL-3.0-or-later**
 (https://github.com/espeak-ng/espeak-ng). It is used only for words outside
-the misaki lexicons, in two independent ways:
+the misaki lexicons.
 
-* **Default build:** the `espeak-ng` (or `espeak`) executable is invoked as a
-  separate process. No eSpeak code or data is distributed with `pdn`.
-* **`-tags espeakwasm`:** `internal/phonemize/wasm/espeak.wasm` and
-  `internal/phonemize/wasm/data/` contain eSpeak NG and its English data. The
-  module is executed by wazero as an isolated, interpreted WASM artifact; it
-  is not linked into the Go binary the way a C library would be.
+* **Shipped release binaries:** built with `-tags espeakwasm`.
+  `internal/phonemize/wasm/espeak.wasm` and `internal/phonemize/wasm/data/`
+  contain eSpeak NG and its English data. The module is executed by wazero as
+  an isolated, interpreted WASM artifact; it is not linked into the Go binary
+  the way a C library would be.
+* **`build-noespeak` / `build-scalar`:** no eSpeak code or data is contained
+  in the binary; the `espeak-ng` (or `espeak`) executable is invoked as a
+  separate process when present.
 
 On that basis this project keeps its own code under Apache-2.0 and treats the
-eSpeak WASM artifact as a separate, optional component. This is a project
-position, not legal advice. If you redistribute a binary built with
-`-tags espeakwasm`, review GPL-3.0 obligations with your own counsel. The
-default binary and the command-line fallback do not include eSpeak code.
+eSpeak WASM artifact as a separate component. This is a project position, not
+legal advice. If you redistribute the embedded build, review GPL-3.0
+obligations with your own counsel. The `build-noespeak` and `build-scalar`
+binaries contain no eSpeak code.
 
 The WASM module is produced by `tools/build_espeak_wasm.sh` from the pinned
 eSpeak NG commit plus `tools/espeak_wasm.c`.

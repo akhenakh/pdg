@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Convert the Paradee ONNX model into pdn's compact model format.
+"""Convert the Paradee ONNX model into PDG's compact model format.
 
-Build-time only. Users of pdn never need Python or ONNX Runtime.
+Build-time only. Users of pdg never need Python or ONNX Runtime.
 
     pip install onnx onnxruntime numpy
     python3 tools/convert.py [--onnx FILE] [--out internal/assets/paradee.bin]
@@ -10,7 +10,7 @@ The ONNX file is first optimized with ONNX Runtime at the BASIC level:
 constant folding removes the int4/int6/int8 weight unpacking and the
 tokenizer/vocab tables baked into the graph, while dynamic shapes
 (the token axis) are preserved.  The remaining graph is a plain ONNX
-program (707 nodes) that pdn's Go executor runs directly.
+program (707 nodes) that PDG's Go executor runs directly.
 
 The output file is:
 
@@ -115,7 +115,7 @@ def main():
     args = ap.parse_args()
 
     src = fetch(DEFAULT_URL, args.onnx)
-    opt = src.replace(".onnx", "_pdn_opt.onnx")
+    opt = src.replace(".onnx", "_pdg_opt.onnx")
     model = optimize(src, opt)
     graph = model.graph
 
@@ -185,7 +185,7 @@ def main():
         "subframe_samples": 150,
     }
     header = {
-        "format": "pdn-model",
+        "format": "pdg-model",
         "version": 1,
         "source": os.path.basename(src),
         "sample_rate": 24000,

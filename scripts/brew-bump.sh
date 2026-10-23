@@ -10,10 +10,10 @@ set -euo pipefail
 TAG="${1:?usage: $0 <tag>}"
 VERSION="${TAG#v}"
 
-BIN="pdn"
-CLASS="Pdn"
-REPO="akhenakh/pdgo"
-DESC="Zero-install pure-Go text-to-speech (Paradee v2g)"
+BIN="pdg"
+CLASS="Pdg"
+REPO="akhenakh/pdg"
+DESC="PDG: zero-install pure-Go text-to-speech (Paradee v2g)"
 LICENSE="Apache-2.0"
 
 TMP="$(mktemp -d)"
@@ -73,14 +73,6 @@ class ${CLASS} < Formula
 
   def install
     bin.install "${BIN}"
-  end
-
-  def caveats
-    <<~EOS
-      For out-of-vocabulary words (mostly names), install eSpeak NG:
-        brew install espeak-ng
-      ${BIN} uses it automatically when it is on PATH.
-    EOS
   end
 
   test do

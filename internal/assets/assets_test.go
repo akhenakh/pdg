@@ -2,7 +2,7 @@ package assets
 
 import "testing"
 
-// The model and lexicons must be compiled in: pdn has no runtime data files.
+// The model and lexicons must be compiled in: pdg has no runtime data files.
 func TestEmbedded(t *testing.T) {
 	if len(Model) < 1_000_000 {
 		t.Fatalf("model is not embedded (%d bytes)", len(Model))
