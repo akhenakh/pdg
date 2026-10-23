@@ -50,6 +50,50 @@ Flags: `-o` output (`-` = stdout), `-speed` rate, `-seed` noise seed (0 =
 random), `-play`, `-quiet`, `-version`, `-first`/`-chunk` (frames in the first
 and later streaming chunks; 80 fps, 300 samples each).
 
+## Use as a library
+
+The module root is the public API:
+
+```go
+import (
+	"context"
+	"os"
+
+	"github.com/akhenak/pdgo"
+)
+
+e, err := pdgo.New()
+if err != nil {
+	panic(err)
+}
+audio, err := e.Synthesize(context.Background(), "Hello from Go.",
+	pdgo.WithSpeed(1.1))
+if err != nil {
+	panic(err)
+}
+f, _ := os.Create("hello.wav")
+defer f.Close()
+if err := pdgo.WriteWAV(f, audio); err != nil {
+	panic(err)
+}
+```
+
+`Synthesize` returns mono `float32` at `pdgo.SampleRate` (24 kHz). For early
+playback, stream instead:
+
+```go
+err = e.Stream(ctx, text, func(chunk []float32) error {
+	_, err := player.Write(pdgo.PCM(chunk)) // raw s16le
+	return err
+}, pdgo.WithChunking(8, 24), pdgo.WithSeed(1))
+```
+
+Options: `WithSpeed`, `WithSeed` (reproducible noise), `WithChunking`
+(first/later chunk sizes in 80 fps frames). `pdgo.PCM` converts a chunk to
+16-bit PCM for a sound device. An `Engine` is safe for concurrent use;
+cancellation is checked between chunks. See `examples/hello` for a complete
+program.
+
 ## Goals
 
 * A **single binary** that does TTS on a fresh Linux machine: no Python

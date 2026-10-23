@@ -55,10 +55,17 @@ func (s *Synth) SetSeed(seed uint64) { s.seed.Store(seed) }
 
 // Synthesize returns the waveform for text. speed > 1 speaks faster.
 func (s *Synth) Synthesize(text string, speed float32) ([]float32, error) {
+	return s.SynthesizeSeed(text, speed, s.seed.Add(1))
+}
+
+// SynthesizeSeed is Synthesize with an explicit noise seed, so callers can
+// reproduce a render without sharing mutable state.
+func (s *Synth) SynthesizeSeed(text string, speed float32, seed uint64) ([]float32, error) {
 	if speed <= 0 {
 		speed = 1
 	}
 	var audio []float32
+	var pieceIndex uint64
 	for _, sentence := range SplitSentences(text) {
 		phonemes := s.g2p.Phonemize(sentence)
 		for _, piece := range SplitPhonemes(phonemes, maxPhonemes) {
@@ -71,12 +78,13 @@ func (s *Synth) Synthesize(text string, speed float32) ([]float32, error) {
 			out, err := s.graph.Run(map[string]*engine.Tensor{
 				"input_ids": in,
 				"speed":     sp,
-			}, s.seed.Add(1))
+			}, seed+pieceIndex)
 			if err != nil {
 				return nil, err
 			}
 			wav := out["waveform"]
 			audio = append(audio, wav.F...)
+			pieceIndex++
 		}
 	}
 	if len(audio) == 0 {
@@ -201,6 +209,12 @@ func lastIndexRuneSet(rs []rune, r rune) int {
 // each), later chunks are chunkFrames long. It returns when the text is
 // finished or yield returns an error.
 func (s *Synth) Stream(text string, speed float32, firstFrames, chunkFrames int, yield func([]float32) error) error {
+	return s.StreamSeed(text, speed, firstFrames, chunkFrames, s.seed.Add(1), yield)
+}
+
+// StreamSeed is Stream with an explicit noise seed. The seed is advanced per
+// synthesized piece, so a fixed seed is reproducible.
+func (s *Synth) StreamSeed(text string, speed float32, firstFrames, chunkFrames int, seed uint64, yield func([]float32) error) error {
 	if speed <= 0 {
 		speed = 1
 	}
@@ -210,6 +224,7 @@ func (s *Synth) Stream(text string, speed float32, firstFrames, chunkFrames int,
 	if chunkFrames <= 0 {
 		chunkFrames = DefaultChunkFrames
 	}
+	var pieceIndex uint64
 	for _, sentence := range SplitSentences(text) {
 		phonemes := s.g2p.Phonemize(sentence)
 		for _, piece := range SplitPhonemes(phonemes, maxPhonemes) {
@@ -221,7 +236,8 @@ func (s *Synth) Stream(text string, speed float32, firstFrames, chunkFrames int,
 				"input_ids": {Kind: engine.I64, Shape: []int{1, len(ids)}, I: ids},
 				"speed":     {Kind: engine.F32, Shape: []int{1}, F: []float32{speed}},
 			}
-			st, err := s.graph.Prepare(in, s.seed.Add(1))
+			st, err := s.graph.Prepare(in, seed+pieceIndex)
+			pieceIndex++
 			if err != nil {
 				return err
 			}
