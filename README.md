@@ -52,18 +52,31 @@ works.
 ## Use
 
 ```sh
-./pdg "Hello, world."                    # writes pdg.wav
-./pdg -o hello.wav "Hello, world."
+./pdg "Hello, world."                    # plays on the default device
+./pdg -o hello.wav "Hello, world."       # writes a file instead
 ./pdg -speed 1.25 "A little faster."
-./pdg -play "Say it out loud."           # pw-play, paplay, aplay or ffplay
+./pdg -first 4 -chunk 16 "Lower latency."
 echo "Long text..." | ./pdg -o - > out.wav
-./pdg -first 4 -chunk 16 -play "Lower latency."
+./pdg -play=false "Hello."               # writes pdg.wav
 ./pdg -seed 42 -o a.wav "Deterministic noise."
 ```
 
-Flags: `-o` output (`-` = stdout), `-speed` rate, `-seed` noise seed (0 =
-random), `-play`, `-quiet`, `-version`, `-first`/`-chunk` (frames in the first
-and later streaming chunks; 80 fps, 300 samples each).
+On a headless machine with no audio device, pass `-o FILE` or `-o -`; otherwise
+the default is to play.
+
+### Notify when a long command finishes
+
+`pdg` is handy at the end of a long build, test run, or download:
+
+```sh
+sleep 20 && pdg "command x finished"
+make build && pdg "build finished"
+```
+
+Flags: `-o` output file (`-` = stdout; setting it disables playback), `-play`
+(default true; set `-play=false` to write `pdg.wav`), `-speed` rate, `-seed`
+noise seed (0 = random), `-quiet`, `-version`, `-first`/`-chunk` (frames in the
+first and later streaming chunks; 80 fps, 300 samples each).
 
 `-play` streams into `pw-play`, `pw-cat`, `paplay`, `aplay`, or `ffplay` when
 one is available. On macOS it falls back to the built-in `afplay`; on Windows
@@ -188,7 +201,7 @@ on a time slice. Streamed audio is **bit-identical** to one-shot synthesis
 one head subframe of overlap. The first chunk is 8 frames (0.1 s) and later
 chunks 24 frames (0.3 s) by default.
 
-`pdg -play` pipes 16-bit PCM straight into `pw-play`/`pw-cat`/`paplay`/
+`pdg` (or `pdg -play`) pipes 16-bit PCM straight into `pw-play`/`pw-cat`/`paplay`/
 `aplay`/`ffplay` as chunks arrive (macOS `afplay` and Windows PowerShell are
 buffered fallbacks); `-o -` writes a streaming WAV. The decoder
 head is already independent of sentence length; the next latency step is

@@ -1,9 +1,9 @@
 // Command pdg speaks text with Paradee v2g, entirely on the CPU.
 //
-//	pdg "Hello, world."              -> pdg.wav
+//	pdg "Hello, world."              -> plays on the default device
 //	pdg -o hello.wav "Hello."        -> hello.wav
 //	echo "Long text" | pdg -o - > a.wav
-//	pdg -play "Say it out loud."
+//	pdg -play=false "Hello."         -> pdg.wav
 package main
 
 import (
@@ -25,10 +25,10 @@ import (
 var version = "dev"
 
 func main() {
-	out := flag.String("o", "pdg.wav", "output WAV file (- for stdout)")
+	out := flag.String("o", "", "output WAV file instead of playing (- for stdout)")
 	speed := flag.Float64("speed", 1, "speaking rate (2 = twice as fast)")
 	seed := flag.Uint64("seed", 0, "noise seed (0 = random)")
-	play := flag.Bool("play", false, "play while synthesizing instead of writing a file")
+	play := flag.Bool("play", true, "play audio (default; ignored when -o is set)")
 	first := flag.Int("first", tts.DefaultFirstFrames, "frames in the first audio chunk (80 fps, 300 samples each)")
 	chunk := flag.Int("chunk", tts.DefaultChunkFrames, "frames per later audio chunk")
 	quiet := flag.Bool("quiet", false, "do not print statistics")
@@ -70,7 +70,11 @@ func main() {
 	var sink func([]float32) error
 	var finish func() error
 	bufferedPlay := false
-	if *play {
+	path := *out
+	if !*play && path == "" {
+		path = "pdg.wav"
+	}
+	if *play && path == "" {
 		if p, err := startStreamingPlayer(); err == nil {
 			sink = func(samples []float32) error {
 				_, err := p.stdin.Write(wav.PCM(samples))
@@ -90,7 +94,7 @@ func main() {
 		} else {
 			fatal(fmt.Errorf("no audio player found (tried pw-play, pw-cat, paplay, aplay, ffplay, afplay, PowerShell); write a file with -o instead"))
 		}
-	} else if *out == "-" {
+	} else if path == "-" {
 		if _, err := os.Stdout.Write(wav.Header(tts.SampleRate, 0xFFFFFFFF)); err != nil {
 			fatal(err)
 		}
@@ -100,7 +104,7 @@ func main() {
 		}
 		finish = func() error { return nil }
 	} else {
-		f, err := os.Create(*out)
+		f, err := os.Create(path)
 		if err != nil {
 			fatal(err)
 		}
@@ -128,7 +132,7 @@ func main() {
 				return err
 			}
 			if !*quiet {
-				fmt.Fprintf(os.Stderr, "pdg: wrote %s\n", *out)
+				fmt.Fprintf(os.Stderr, "pdg: wrote %s\n", path)
 			}
 			return nil
 		}
